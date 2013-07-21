@@ -5,7 +5,7 @@ from collections import defaultdict, deque
 
 __module_name__ = "Yak's Highlight Collector"
 __module_version__ = '1.0'
-__module_description__ = 'Logs highlights in a separate tab, and also in a useful manner!'
+__module_description__ = 'Logs highlights in a separate tab'
 __module_author__ = 'theY4Kman'
 
 
@@ -45,10 +45,6 @@ HIGHLIGHT_CHANNEL_PREFIX = '!@'
 #   EVENT_CHANNEL_MESSAGE_HIGHLIGHT
 #     word: [nick_without_colors, message, user_mode_char]
 #           ['yakbot', 'yo they4kman', '@']
-#
-#
-# TODO:
-#   - Save nick colors of usernames in a dict
 
 
 @contextmanager
@@ -69,14 +65,14 @@ class DefaultDict(defaultdict):
 
 
 class ChannelCollector(object):
-    """ Manages the highlights, history, and nick colours for a single channel """
+    """Manages the highlights, history, and nick colours for a single channel"""
 
     DEFAULT_HISTORY_LENGTH = 4
 
     def __init__(self, channel, history_length=None):
         self.channel = channel
 
-        self.history_length = history_length if history_length is not None else self.DEFAULT_HISTORY_LENGTH
+        self.history_length = history_length or self.DEFAULT_HISTORY_LENGTH
         self.history = deque(maxlen=self.history_length)
         self.nick_colors = {}
         self.show_more = 0
@@ -91,10 +87,12 @@ class ChannelCollector(object):
         channel = xchat.get_context().get_info('channel')
         query = xchat.find_context(server, HIGHLIGHT_CHANNEL_PREFIX + channel)
         if not query:
-            query = xchat.find_context(server, self._create_highlight_out(channel))
+            highlight_out = self._create_highlight_out(channel)
+            query = xchat.find_context(server, highlight_out)
         return query
 
-    def record_message(self, nick, message, highlight=False, action=False, me=False):
+    def record_message(self, nick, message,
+                       highlight=False, action=False, me=False):
         """ Records a message passed by XChat to history. """
         if nick.startswith('\x03'):
             nick_color = int(nick[1:3])
@@ -113,12 +111,12 @@ class ChannelCollector(object):
                 self.print_history_line(ctx, *self.history.pop())
             self.show_more -= 1
 
-
     def print_history_line(self, ctx, nick, message, highlight, action, me):
         if not highlight and not me and nick in self.nick_colors:
             nick_print = '\x03%02d%s' % (self.nick_colors[nick], nick)
         elif me:
-            nick_print = '\x03%02d%s' % (MY_ACTION_COLOR if action else MY_NICK_COLOR, nick)
+            color = MY_ACTION_COLOR if action else MY_NICK_COLOR
+            nick_print = '\x03%02d%s' % (color, nick)
         else:
             nick_print = nick
 
@@ -128,10 +126,12 @@ class ChannelCollector(object):
             else:
                 asterisk_color = '\x03%02d' % CHANNEL_ACTION_COLOR
             reset_color = '' if highlight else '\x03'
-            message = '%s*\x03\t%s %s%s' % (asterisk_color, nick_print, reset_color, message)
+            message = '%s*\x03\t%s %s%s' % (asterisk_color, nick_print,
+                                            reset_color, message)
         else:
             if highlight:
-                nick_quoted = '\x03%02d<\x02%s\x02>' % (CHANNEL_HIGHLIGHT_COLOR, nick_print)
+                nick_quoted = '\x03%02d<\x02%s\x02>' % (CHANNEL_HIGHLIGHT_COLOR,
+                                                        nick_print)
             else:
                 nick_quoted = '\x03<%s\x03>' % nick_print
             message = '%s\t%s\x03' % (nick_quoted, message)
@@ -142,7 +142,8 @@ class ChannelCollector(object):
         old_ctx = xchat.find_context()
         ctx = self.get_highlight_out()
         with xchat_ctx(old_ctx, ctx):
-            ctx.prnt('\x02### At %s' % (datetime.now().strftime('%Y/%m/%d %H:%M:%S')))
+            ctx.prnt('\x02### At %s' %
+                     datetime.now().strftime('%Y/%m/%d %H:%M:%S'))
 
             for line in reversed(self.history):
                 self.print_history_line(ctx, *line)
